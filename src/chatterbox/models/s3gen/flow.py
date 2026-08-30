@@ -99,9 +99,9 @@ class MaskedDiffWithXvec(torch.nn.Module):
         token = self.input_embedding(torch.clamp(token, min=0, max=self.input_embedding.num_embeddings-1)) * mask
 
         # text encode
-        h, h_lengths = self.encoder(token, token_len)
+        h, _ = self.encoder(token, token_len)
         h = self.encoder_proj(h)
-        h, h_lengths = self.length_regulator(h, feat_len)
+        h, _ = self.length_regulator(h, feat_len)
 
         # get conditions
         conds = torch.zeros(feat.shape, device=token.device)
@@ -155,10 +155,10 @@ class MaskedDiffWithXvec(torch.nn.Module):
         token = self.input_embedding(torch.clamp(token, min=0, max=vocab_size-1)) * mask
 
         # text encode
-        h, h_lengths = self.encoder(token, token_len)
+        h, _ = self.encoder(token, token_len)
         h = self.encoder_proj(h)
         mel_len1, mel_len2 = prompt_feat.shape[1], int(token_len2 / self.input_frame_rate * 22050 / 256)
-        h, h_lengths = self.length_regulator.inference(h[:, :token_len1], h[:, token_len1:], mel_len1, mel_len2, self.input_frame_rate)
+        h, _ = self.length_regulator.inference(h[:, :token_len1], h[:, token_len1:], mel_len1, mel_len2, self.input_frame_rate)
 
         # get conditions
         conds = torch.zeros([1, mel_len1 + mel_len2, self.output_size], device=token.device).to(h.dtype)
@@ -266,7 +266,7 @@ class CausalMaskedDiffWithXvec(torch.nn.Module):
         token = self.input_embedding(torch.clamp(token, min=0, max=self.input_embedding.num_embeddings-1)) * mask
 
         # text encode
-        h, h_lengths = self.encoder(token, token_len)
+        h, _ = self.encoder(token, token_len)
         if finalize is False:
             h = h[:, :-self.pre_lookahead_len * self.token_mel_ratio]
         mel_len1, mel_len2 = prompt_feat.shape[1], h.shape[1] - prompt_feat.shape[1]

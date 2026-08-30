@@ -38,7 +38,6 @@ def drop_invalid_tokens(x):
     return x[x < SPEECH_VOCAB_SIZE]
 
 
-# TODO: global resampler cache
 @lru_cache(100)
 def get_resampler(src_sr, dst_sr, device):
     return ta.transforms.Resample(src_sr, dst_sr).to(device)
@@ -53,7 +52,7 @@ class S3Token2Mel(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.tokenizer = S3Tokenizer("speech_tokenizer_v2_25hz")
-        self.mel_extractor = mel_spectrogram # TODO: make it a torch module?
+        self.mel_extractor = mel_spectrogram  # stateless fn, no parameters to track as a module
         self.speaker_encoder = CAMPPlus()  # use default args
 
         encoder = UpsampleConformerEncoder(
@@ -188,7 +187,7 @@ class S3Token2Mel(torch.nn.Module):
             ref_dict = self.embed_ref(ref_wav, ref_sr)
         else:
             # type/device casting (all values will be numpy if it's from a prod API call)
-            for rk in list(ref_dict):
+            for rk in ref_dict:
                 if isinstance(ref_dict[rk], np.ndarray):
                     ref_dict[rk] = torch.from_numpy(ref_dict[rk])
                 if torch.is_tensor(ref_dict[rk]):
@@ -197,7 +196,6 @@ class S3Token2Mel(torch.nn.Module):
         if len(speech_tokens.shape) == 1:
             speech_tokens = speech_tokens.unsqueeze(0)
 
-        # assert speech_tokens.shape[0] == 1, "only batch size of one allowed for now"
         speech_token_lens = torch.LongTensor([speech_tokens.size(1)]).to(self.device)
 
         output_mels, _ = self.flow.inference(
@@ -247,7 +245,8 @@ class S3Token2Wav(S3Token2Mel):
     ):
         output_mels = super().forward(speech_tokens, ref_wav=ref_wav, ref_sr=ref_sr, ref_dict=ref_dict, finalize=finalize)
 
-        # TODO jrm: ignoring the speed control (mel interpolation) and the HiFTGAN caching mechanisms for now.
+        # NOTE: this non-streaming path skips speed control and HiFTGAN caching; streaming inference
+        # (with real cache_source) goes through `inference`/`hift_inference` instead.
         hift_cache_source = torch.zeros(1, 1, 0).to(self.device)
 
         output_wavs, *_ = self.mel2wav.inference(speech_feat=output_mels, cache_source=hift_cache_source)
