@@ -22,6 +22,9 @@ from torch.nn import functional as F
 from .utils.mask import make_pad_mask
 from .configs import CFM_PARAMS
 
+# Not used for security purposes, only for training-time data augmentation.
+_augmentation_rng = random.SystemRandom()
+
 
 class MaskedDiffWithXvec(torch.nn.Module):
     def __init__(
@@ -36,33 +39,37 @@ class MaskedDiffWithXvec(torch.nn.Module):
         encoder: torch.nn.Module = None,
         length_regulator: torch.nn.Module = None,
         decoder: torch.nn.Module = None,
-        decoder_conf: Dict = {
-            'in_channels': 240,
-            'out_channel': 80,
-            'spk_emb_dim': 80,
-            'n_spks': 1,
-            'cfm_params': CFM_PARAMS,
-            'decoder_params': {
-                'channels': [256, 256],
-                'dropout': 0.0,
-                'attention_head_dim': 64,
-                'n_blocks': 4,
-                'num_mid_blocks': 12,
-                'num_heads': 8,
-                'act_fn': 'gelu',
-            }
-        },
-        mel_feat_conf: Dict = {
-            'n_fft': 1024,
-            'num_mels': 80,
-            'sampling_rate': 22050,
-            'hop_size': 256,
-            'win_size': 1024,
-            'fmin': 0,
-            'fmax': 8000
-        }
+        decoder_conf: Dict = None,
+        mel_feat_conf: Dict = None,
     ):
         super().__init__()
+        if decoder_conf is None:
+            decoder_conf = {
+                'in_channels': 240,
+                'out_channel': 80,
+                'spk_emb_dim': 80,
+                'n_spks': 1,
+                'cfm_params': CFM_PARAMS,
+                'decoder_params': {
+                    'channels': [256, 256],
+                    'dropout': 0.0,
+                    'attention_head_dim': 64,
+                    'n_blocks': 4,
+                    'num_mid_blocks': 12,
+                    'num_heads': 8,
+                    'act_fn': 'gelu',
+                }
+            }
+        if mel_feat_conf is None:
+            mel_feat_conf = {
+                'n_fft': 1024,
+                'num_mels': 80,
+                'sampling_rate': 22050,
+                'hop_size': 256,
+                'win_size': 1024,
+                'fmin': 0,
+                'fmax': 8000
+            }
         self.input_size = input_size
         self.output_size = output_size
         self.decoder_conf = decoder_conf
@@ -106,9 +113,9 @@ class MaskedDiffWithXvec(torch.nn.Module):
         # get conditions
         conds = torch.zeros(feat.shape, device=token.device)
         for i, j in enumerate(feat_len):
-            if random.random() < 0.5:
+            if _augmentation_rng.random() < 0.5:
                 continue
-            index = random.randint(0, int(0.3 * j))
+            index = _augmentation_rng.randint(0, int(0.3 * j))
             conds[i, :index] = feat[i, :index]
         conds = conds.transpose(1, 2)
 
@@ -194,33 +201,37 @@ class CausalMaskedDiffWithXvec(torch.nn.Module):
         pre_lookahead_len: int = 3,
         encoder: torch.nn.Module = None,
         decoder: torch.nn.Module = None,
-        decoder_conf: Dict = {
-            'in_channels': 240,
-            'out_channel': 80,
-            'spk_emb_dim': 80,
-            'n_spks': 1,
-            'cfm_params': CFM_PARAMS,
-            'decoder_params': {
-                'channels': [256, 256],
-                'dropout': 0.0,
-                'attention_head_dim': 64,
-                'n_blocks': 4,
-                'num_mid_blocks': 12,
-                'num_heads': 8,
-                'act_fn': 'gelu',
-            }
-        },
-        mel_feat_conf: Dict = {
-            'n_fft': 1024,
-            'num_mels': 80,
-            'sampling_rate': 22050,
-            'hop_size': 256,
-            'win_size': 1024,
-            'fmin': 0,
-            'fmax': 8000
-        }
+        decoder_conf: Dict = None,
+        mel_feat_conf: Dict = None,
     ):
         super().__init__()
+        if decoder_conf is None:
+            decoder_conf = {
+                'in_channels': 240,
+                'out_channel': 80,
+                'spk_emb_dim': 80,
+                'n_spks': 1,
+                'cfm_params': CFM_PARAMS,
+                'decoder_params': {
+                    'channels': [256, 256],
+                    'dropout': 0.0,
+                    'attention_head_dim': 64,
+                    'n_blocks': 4,
+                    'num_mid_blocks': 12,
+                    'num_heads': 8,
+                    'act_fn': 'gelu',
+                }
+            }
+        if mel_feat_conf is None:
+            mel_feat_conf = {
+                'n_fft': 1024,
+                'num_mels': 80,
+                'sampling_rate': 22050,
+                'hop_size': 256,
+                'win_size': 1024,
+                'fmin': 0,
+                'fmax': 8000
+            }
         self.input_size = input_size
         self.output_size = output_size
         self.decoder_conf = decoder_conf
@@ -237,9 +248,7 @@ class CausalMaskedDiffWithXvec(torch.nn.Module):
         self.only_mask_loss = only_mask_loss
         self.token_mel_ratio = token_mel_ratio
         self.pre_lookahead_len = pre_lookahead_len
-
-        # FIXME: this was missing - just putting it in as false
-        self.fp16 = False
+        self.fp16 = decoder_conf.get('fp16', False)
 
     @torch.inference_mode()
     def inference(self,
